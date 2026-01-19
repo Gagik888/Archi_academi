@@ -1,47 +1,49 @@
 "use client";
 import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
-import { Globe, User, ArrowRight } from "lucide-react";
+import { User, ArrowRight } from "lucide-react";
 
 export default function LoginPage() {
   const [nickname, setNickname] = useState("");
   const [ip, setIp] = useState("");
   const [loading, setLoading] = useState(false);
 
-  // 1. Получаем IP пользователя при загрузке страницы
+  // 1. Скрыто получаем IP при загрузке
   useEffect(() => {
-    fetch("https://api.ipify.org?format=json")
-      .then((res) => res.json())
-      .then((data) => {
+    const getIp = async () => {
+      try {
+        const res = await fetch("https://api.ipify.org?format=json");
+        const data = await res.json();
         setIp(data.ip);
         localStorage.setItem("archi_user_ip", data.ip);
-      })
-      .catch(() => setIp("Не удалось определить IP"));
+      } catch (e) {
+        console.error("Ошибка IP:", e);
+      }
+    };
+    getIp();
   }, []);
 
   const handleLogin = async () => {
-    if (!nickname.trim()) return alert("Введите имя!");
+    if (!nickname.trim()) return alert("Придумай имя!");
+    if (!ip) return alert("Соединение устанавливается, подожди секунду...");
     setLoading(true);
 
     try {
-      // 2. Ищем пользователя по ip_address (не по id!)
-      const { data: existingUser, error: fetchError } = await supabase
+      // 2. Ищем пользователя по ip_address
+      const { data: existingUser } = await supabase
         .from("profiles")
         .select("*")
         .eq("ip_address", ip)
         .single();
 
       if (existingUser) {
-        // Если юзер есть, обновляем ему никнейм (по желанию) и заходим
+        // Обновляем имя, если зашли под новым
         await supabase
           .from("profiles")
           .update({ username: nickname })
           .eq("ip_address", ip);
-        
-        window.location.href = "/map";
       } else {
-        // 3. Если юзера нет, создаем его. 
-        // Поле 'id' НЕ ПИШЕМ, база сама поставит 1, 2, 3...
+        // Создаем нового пользователя (id база поставит сама: 1, 2, 3...)
         const { error: insertError } = await supabase
           .from("profiles")
           .insert([
@@ -55,11 +57,15 @@ export default function LoginPage() {
           ]);
 
         if (insertError) throw insertError;
-        window.location.href = "/map";
       }
+
+      // 3. Сохраняем IP локально и идем на карту
+      localStorage.setItem("archi_user_ip", ip);
+      window.location.href = "/map";
+
     } catch (err: any) {
       console.error(err);
-      alert("Ошибка базы данных: " + err.message);
+      alert("Ошибка входа: " + err.message);
     } finally {
       setLoading(false);
     }
@@ -84,17 +90,9 @@ export default function LoginPage() {
         maxWidth: '400px',
         textAlign: 'center'
       }}>
-        <img src="/archi-green.png" style={{ width: '80px', marginBottom: '20px' }} />
+        <img src="/archi-green.png" style={{ width: '80px', marginBottom: '20px' }} alt="Archi" />
         <h1 style={{ fontSize: '1.8rem', fontWeight: '900', color: '#00ff00', marginBottom: '10px' }}>ARCHI ACADEMY</h1>
         <p style={{ color: '#666', marginBottom: '30px' }}>Вход в систему обучения</p>
-
-        <div style={{ textAlign: 'left', marginBottom: '20px' }}>
-          <label style={{ display: 'block', color: '#444', fontSize: '0.8rem', marginBottom: '8px', marginLeft: '10px' }}>ВАШ IP</label>
-          <div style={{ background: '#000', padding: '15px', borderRadius: '15px', border: '1px solid #222', display: 'flex', alignItems: 'center', gap: '10px', color: '#00ff00' }}>
-            <Globe size={18} />
-            <span>{ip || "Загрузка..."}</span>
-          </div>
-        </div>
 
         <div style={{ textAlign: 'left', marginBottom: '30px' }}>
           <label style={{ display: 'block', color: '#444', fontSize: '0.8rem', marginBottom: '8px', marginLeft: '10px' }}>ВАШЕ ИМЯ</label>
@@ -115,20 +113,21 @@ export default function LoginPage() {
           disabled={loading}
           style={{ 
             width: '100%', 
-            background: '#00ff00', 
+            background: loading ? '#222' : '#00ff00', 
             color: '#000', 
             padding: '18px', 
             borderRadius: '15px', 
             fontWeight: '900', 
             border: 'none', 
-            cursor: 'pointer',
+            cursor: loading ? 'not-allowed' : 'pointer',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            gap: '10px'
+            gap: '10px',
+            transition: '0.3s'
           }}
         >
-          {loading ? "ПОДКЛЮЧЕНИЕ..." : "НАЧАТЬ ОБУЧЕНИЕ"} <ArrowRight size={20} />
+          {loading ? "ЗАГРУЗКА..." : "НАЧАТЬ ОБУЧЕНИЕ"} <ArrowRight size={20} />
         </button>
       </div>
     </div>
