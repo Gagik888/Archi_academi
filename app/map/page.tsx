@@ -98,29 +98,49 @@ export default function MapPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
-          code: userCode, stepTitle: currentStep, topic: data?.courseTitle, level: data?.level 
+          code: userCode, 
+          stepTitle: currentStep, 
+          topic: data?.courseTitle, 
+          level: data?.level 
         }),
       });
+      
       const result = await res.json();
       setFeedback(result.feedback);
 
+      // Если Арчи дал награду и у нас есть IP
       if (result.reward > 0 && userIp) {
-        const newBalance = coins + result.reward;
-        // Обновляем в базе именно по ip_address
-        await supabase.from('profiles').update({ coins: newBalance }).eq('ip_address', userIp);
-        setCoins(newBalance);
+        // Защита: если coins вдруг null, считаем как 0
+        const currentCoins = coins || 0;
+        const newBalance = currentCoins + result.reward;
+        
+        // ОБНОВЛЕНИЕ В БАЗЕ (используем ip_address)
+        const { error: updateError } = await supabase
+          .from('profiles')
+          .update({ coins: newBalance })
+          .eq('ip_address', userIp);
+
+        if (!updateError) {
+          setCoins(newBalance); // Обновляем на экране только если база приняла
+          console.log("Монеты начислены!");
+        } else {
+          console.error("Ошибка Supabase:", updateError.message);
+        }
       }
     } catch (e) {
       setFeedback("Ошибка связи с Арчи.");
+      console.error("Ошибка запроса:", e);
     } finally {
       setChecking(false);
     }
   };
 
   // Вспомогательная функция (заглушка для сброса курса)
-  const resetCourse = () => {
-    alert("Функция сброса курса в разработке!");
-  };
+const resetCourse = () => {
+  if(confirm("Ты уверен, что хочешь сбросить текущий курс?")) {
+    window.location.href = "/"; // Перекидывает на выбор курса
+  }
+};
 
   // Покупка скина
   const buyOrSelectSkin = async (skinId: string, price: number) => {
